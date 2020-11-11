@@ -1,9 +1,17 @@
-FROM alpine:edge
+FROM golang:alpine AS builder
+RUN apk update && apk add --no-cache git bash wget curl
+WORKDIR /go/src/v2ray.com/core
+RUN git clone --progress https://github.com/v2fly/v2ray-core.git . && \
+    bash ./release/user-package.sh nosource noconf codename=$(git describe --tags) buildname=docker-fly abpathtgz=/tmp/v2ray.tgz
 
-ENV SHURL https://raw.githubusercontent.com/mixool/across/master/dockershc/ura3y.sh
+FROM alpine
+ENV CONFIG="https://raw.githubusercontent.com/mmpuq/mixool-v2ray/master/kinto/config.json"
 
-RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories && apk update && apk add --no-cache gcc musl-dev shc && \
-    wget $SHURL -O /worker && shc -r -B -f /worker && /worker.x && \
-    apk del gcc musl-dev shc && rm -rf /worker /worker.x.c /var/cache/apk/*
+COPY --from=builder /tmp/v2ray.tgz /tmp
+RUN apk update && apk add --no-cache tor ca-certificates && \
+    mkdir -p /usr/bin/v2ray && \
+    tar xvfz /tmp/v2ray.tgz -C /usr/bin/v2ray && \
+    rm -rf /tmp/v2ray.tgz
     
-CMD /worker.x
+CMD nohup tor & \
+    /usr/bin/v2ray/v2ray -config $CONFIG
